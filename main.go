@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -106,10 +107,12 @@ func runGet(opts getOptions) error {
 }
 
 func apiStatus(login string) (*status, error) {
+	key := "user"
 	query := fmt.Sprintf(
 		`query { user(login:"%s") { status { indicatesLimitedAvailability message emoji }}}`,
 		login)
 	if login == "" {
+		key = "viewer"
 		query = `query {viewer { status { indicatesLimitedAvailability message emoji }}}`
 	}
 
@@ -126,14 +129,19 @@ func apiStatus(login string) (*status, error) {
 		return nil, fmt.Errorf("failed to run gh: %w", err)
 	}
 
-	resp := map[string]interface{}{}
+	resp := map[string]map[string]map[string]status{}
 
 	err = json.Unmarshal(out.Bytes(), &resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to deserialize JSON: %w", err)
 	}
 
-	return &resp.Data.User.Status, nil
+	s, ok := resp["data"][key]["status"]
+	if !ok {
+		return nil, errors.New("failed to deserialize JSON")
+	}
+
+	return &s, nil
 }
 
 func main() {
