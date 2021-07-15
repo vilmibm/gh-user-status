@@ -100,8 +100,14 @@ func runGet(opts getOptions) error {
 		return err
 	}
 
-	// TODO
-	fmt.Println(s)
+	availability := ""
+	if s.IndicatesLimitedAvailability {
+		availability = "(availability is limited)"
+	}
+	fmt.Printf("%s %s %s\n",
+		s.Emoji, // TODO try and map to unicode
+		s.Message,
+		availability)
 
 	return nil
 }
