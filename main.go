@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -92,9 +94,6 @@ type status struct {
 }
 
 func runGet(opts getOptions) error {
-	if opts.Login == "" {
-		panic("TODO")
-	}
 	s, err := apiStatus(opts.Login)
 	if err != nil {
 		return err
@@ -106,35 +105,35 @@ func runGet(opts getOptions) error {
 	return nil
 }
 
-func apiStatus(login string) (status, error) {
-	query := fmt.Sprintf(`query getUserStatus {
-		user(login:"%s") {
-			status {
-				indicatesLimitedAvailability
-				message
-				emoji
-		}}}`, login)
+func apiStatus(login string) (*status, error) {
+	query := fmt.Sprintf(
+		`query { user(login:"%s") { status { indicatesLimitedAvailability message emoji }}}`,
+		login)
+	if login == "" {
+		query = `query {viewer { status { indicatesLimitedAvailability message emoji }}}`
+	}
 
-	// TODO
-	fmt.Println(query)
 	ghBin, err := safeexec.LookPath("gh")
 	if err != nil {
-		return status{}, err
+		return nil, fmt.Errorf("could not find gh. Is it installed? error: %w", err)
 	}
-	// TODO gh api just opaquely returning exit status 1, why? is there an
-	// escaping problem? gh api is running fine manually.
-	// the env thing is stupid and didn't help
-	queryValue := fmt.Sprintf("STATUS_QUERY=query='%s'", query)
-	cmd := exec.Command(ghBin, "api", "graphql", "-f", "$STATUS_QUERY")
-	cmd.Env = append(os.Environ(), queryValue)
+	var out bytes.Buffer
+	cmd := exec.Command(ghBin, "api", "graphql", "-f", fmt.Sprintf("query=%s", query))
+	cmd.Stdout = &out
+	cmd.Stderr = os.Stderr
 	err = cmd.Run()
 	if err != nil {
-		fmt.Printf("DBG %#v\n", cmd)
-		fmt.Printf("DBG %#v\n", err)
-		return status{}, err
+		return nil, fmt.Errorf("failed to run gh: %w", err)
 	}
 
-	return status{}, nil
+	resp := map[string]interface{}{}
+
+	err = json.Unmarshal(out.Bytes(), &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to deserialize JSON: %w", err)
+	}
+
+	return &resp.Data.User.Status, nil
 }
 
 func main() {
