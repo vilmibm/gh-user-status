@@ -51,19 +51,41 @@ func runSet(opts setOptions) error {
 	// TODO expiry flag
 	// TODO emoji flag
 	// TODO org flag
-	/*
-			# We'll get you started with a simple query showing your username!
-		mutation ($status: ChangeUserStatusInput!) {
-		    changeUserStatus(input: $status) {
-		      status {
-		        emoji
-		        expiresAt
-		        limitedAvailability: indicatesLimitedAvailability
-		        message
-		      }
-		    }
-		  }*/
-	fmt.Printf("set %s\n", opts.Status)
+	mutation := `mutation($status: ChangeUserStatusInput!) {
+		changeUserStatus(input: $status) {
+			status {
+				message
+				emoji
+			}
+		}
+	}`
+	input := map[string]string{
+		"emoji":   ":palm_tree:",
+		"message": "foobar",
+	}
+
+	inputJSON, err := json.Marshal(input)
+	if err != nil {
+		return fmt.Errorf("failed to serialize arguments: %w", err)
+	}
+
+	fmt.Println(string(inputJSON))
+
+	ghBin, err := safeexec.LookPath("gh")
+	if err != nil {
+		return fmt.Errorf("could not find gh. Is it installed? error: %w", err)
+	}
+
+	cmd := exec.Command(ghBin, "api", "graphql",
+		"-f", fmt.Sprintf("query=%s", mutation),
+		"-f", fmt.Sprintf("status='%s'", string(inputJSON)))
+
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to run gh: %w", err)
+	}
+
 	return nil
 }
 
@@ -152,10 +174,8 @@ func apiStatus(login string) (*status, error) {
 
 func main() {
 	rc := rootCmd()
-	sc := setCmd()
-	gc := getCmd()
-	rc.AddCommand(sc)
-	rc.AddCommand(gc)
+	rc.AddCommand(setCmd())
+	rc.AddCommand(getCmd())
 
 	if err := rc.Execute(); err != nil {
 		fmt.Println(err)
