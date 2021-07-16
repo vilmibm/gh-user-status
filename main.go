@@ -20,7 +20,7 @@ func rootCmd() *cobra.Command {
 }
 
 type setOptions struct {
-	Status  string
+	Message string
 	Limited bool
 	Expiry  time.Duration
 	Emoji   string
@@ -34,11 +34,11 @@ func setCmd() *cobra.Command {
 		Short: "set your GitHub status",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts.Status = args[0]
+			opts.Message = args[0]
 			return runSet(opts)
 		},
 	}
-	cmd.Flags().StringVarP(&opts.Emoji, "emoji", "e", "", "Emoji for status")
+	cmd.Flags().StringVarP(&opts.Emoji, "emoji", "e", ":thought_balloon:", "Emoji for status")
 	cmd.Flags().BoolVarP(&opts.Limited, "limited", "l", false, "Indicate limited availability")
 	cmd.Flags().DurationVarP(&opts.Expiry, "expiry", "E", time.Duration(0), "Expire status after this duration")
 	cmd.Flags().StringVarP(&opts.OrgName, "org", "o", "", "Limit status visibility to an organization")
@@ -49,7 +49,6 @@ func setCmd() *cobra.Command {
 func runSet(opts setOptions) error {
 	// TODO limited flag
 	// TODO expiry flag
-	// TODO emoji flag
 	// TODO org flag
 	mutation := `mutation($emoji: String!, $message: String!) {
 		changeUserStatus(input: {emoji: $emoji, message: $message}) {
@@ -65,16 +64,39 @@ func runSet(opts setOptions) error {
 		return fmt.Errorf("could not find gh. Is it installed? error: %w", err)
 	}
 
-	cmd := exec.Command(ghBin, "api", "graphql",
+	cmdArgs := []string{
+		"api", "graphql",
 		"-f", fmt.Sprintf("query=%s", mutation),
-		"-f", "emoji=:palm_tree:",
-		"-f", "message=foobar")
+		"-f", fmt.Sprintf("message=%s", opts.Message),
+		"-f", fmt.Sprintf("emoji=%s", opts.Emoji),
+	}
 
+	var out bytes.Buffer
+	cmd := exec.Command(ghBin, cmdArgs...)
 	cmd.Stderr = os.Stderr
+	cmd.Stdout = &out
 	err = cmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to run gh: %w", err)
 	}
+	type response struct {
+		Data struct {
+			ChangeUserStatus struct {
+				Status status
+			}
+		}
+	}
+	var resp response
+	err = json.Unmarshal(out.Bytes(), &resp)
+	if err != nil {
+		return fmt.Errorf("failed to deserialize JSON: %w", err)
+	}
+
+	if resp.Data.ChangeUserStatus.Status.Emoji != opts.Emoji {
+		return errors.New("failed to set status. Perhaps try another emoji")
+	}
+
+	// TODO print a nice confirm
 
 	return nil
 }
@@ -84,8 +106,6 @@ type getOptions struct {
 }
 
 func getCmd() *cobra.Command {
-	// TODO get arbitrary user
-	// TODO get current user
 	return &cobra.Command{
 		Use:   "get [<username>]",
 		Short: "get a GitHub user's status or your own",
