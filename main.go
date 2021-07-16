@@ -51,25 +51,14 @@ func runSet(opts setOptions) error {
 	// TODO expiry flag
 	// TODO emoji flag
 	// TODO org flag
-	mutation := `mutation($status: ChangeUserStatusInput!) {
-		changeUserStatus(input: $status) {
+	mutation := `mutation($emoji: String!, $message: String!) {
+		changeUserStatus(input: {emoji: $emoji, message: $message}) {
 			status {
 				message
 				emoji
 			}
 		}
 	}`
-	input := map[string]string{
-		"emoji":   ":palm_tree:",
-		"message": "foobar",
-	}
-
-	inputJSON, err := json.Marshal(input)
-	if err != nil {
-		return fmt.Errorf("failed to serialize arguments: %w", err)
-	}
-
-	fmt.Println(string(inputJSON))
 
 	ghBin, err := safeexec.LookPath("gh")
 	if err != nil {
@@ -78,7 +67,8 @@ func runSet(opts setOptions) error {
 
 	cmd := exec.Command(ghBin, "api", "graphql",
 		"-f", fmt.Sprintf("query=%s", mutation),
-		"-f", fmt.Sprintf("status='%s'", string(inputJSON)))
+		"-f", "emoji=:palm_tree:",
+		"-f", "message=foobar")
 
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
