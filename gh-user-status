@@ -5,6 +5,11 @@ if [ "$(which go)" = "" ]; then
 	exit 1
 fi
 
+exe="cmd.out"
 extensionPath="$(dirname $(realpath $0))"
 
-go run "$extensionPath/main.go" "$@"
+cd "${extensionPath}" > /dev/null
+go build -o "${exe}"
+cd - > /dev/null
+
+exec "${extensionPath}/${exe}"
