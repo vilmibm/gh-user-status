@@ -47,11 +47,10 @@ func setCmd() *cobra.Command {
 }
 
 func runSet(opts setOptions) error {
-	// TODO limited flag
 	// TODO expiry flag
-	// TODO org flag
-	mutation := `mutation($emoji: String!, $message: String!) {
-		changeUserStatus(input: {emoji: $emoji, message: $message}) {
+	// TODO org flag -- punted on this bc i have to resolve an org ID and it didn't feel worth it.
+	mutation := `mutation($emoji: String!, $message: String!, $limited: Boolean) {
+		changeUserStatus(input: {emoji: $emoji, message: $message, limitedAvailability: $limited}) {
 			status {
 				message
 				emoji
@@ -64,11 +63,17 @@ func runSet(opts setOptions) error {
 		return fmt.Errorf("could not find gh. Is it installed? error: %w", err)
 	}
 
+	limited := "false"
+	if opts.Limited {
+		limited = "true"
+	}
+
 	cmdArgs := []string{
 		"api", "graphql",
 		"-f", fmt.Sprintf("query=%s", mutation),
 		"-f", fmt.Sprintf("message=%s", opts.Message),
 		"-f", fmt.Sprintf("emoji=%s", opts.Emoji),
+		"-F", fmt.Sprintf("limited=%s", limited),
 	}
 
 	var out bytes.Buffer
