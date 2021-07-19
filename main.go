@@ -57,11 +57,6 @@ func runSet(opts setOptions) error {
 		}
 	}`
 
-	ghBin, err := safeexec.LookPath("gh")
-	if err != nil {
-		return fmt.Errorf("could not find gh. Is it installed? error: %w", err)
-	}
-
 	limited := "false"
 	if opts.Limited {
 		limited = "true"
@@ -81,13 +76,9 @@ func runSet(opts setOptions) error {
 		"-F", fmt.Sprintf("expiry=%s", expiry),
 	}
 
-	var out bytes.Buffer
-	cmd := exec.Command(ghBin, cmdArgs...)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = &out
-	err = cmd.Run()
+	out, _, err := gh(cmdArgs...)
 	if err != nil {
-		return fmt.Errorf("failed to run gh: %w", err)
+		return err
 	}
 	type response struct {
 		Data struct {
@@ -164,22 +155,15 @@ func apiStatus(login string) (*status, error) {
 		query = `query {viewer { status { indicatesLimitedAvailability message emoji }}}`
 	}
 
-	ghBin, err := safeexec.LookPath("gh")
+	args := []string{"api", "graphql", "-f", fmt.Sprintf("query=%s", query)}
+	sout, _, err := gh(args...)
 	if err != nil {
-		return nil, fmt.Errorf("could not find gh. Is it installed? error: %w", err)
-	}
-	var out bytes.Buffer
-	cmd := exec.Command(ghBin, "api", "graphql", "-f", fmt.Sprintf("query=%s", query))
-	cmd.Stdout = &out
-	cmd.Stderr = os.Stderr
-	err = cmd.Run()
-	if err != nil {
-		return nil, fmt.Errorf("failed to run gh: %w", err)
+		return nil, err
 	}
 
 	resp := map[string]map[string]map[string]status{}
 
-	err = json.Unmarshal(out.Bytes(), &resp)
+	err = json.Unmarshal(sout.Bytes(), &resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to deserialize JSON: %w", err)
 	}
@@ -201,4 +185,25 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+// gh shells out to gh, returning STDOUT/STDERR and any error
+func gh(args ...string) (sout, eout bytes.Buffer, err error) {
+	ghBin, err := safeexec.LookPath("gh")
+	if err != nil {
+		err = fmt.Errorf("could not find gh. Is it installed? error: %w", err)
+		return
+	}
+
+	cmd := exec.Command(ghBin, args...)
+	cmd.Stderr = &eout
+	cmd.Stdout = &sout
+
+	err = cmd.Run()
+	if err != nil {
+		err = fmt.Errorf("failed to run gh. error: %w, stderr: %s", err, eout.String())
+		return
+	}
+
+	return
 }
