@@ -47,10 +47,9 @@ func setCmd() *cobra.Command {
 }
 
 func runSet(opts setOptions) error {
-	// TODO expiry flag
 	// TODO org flag -- punted on this bc i have to resolve an org ID and it didn't feel worth it.
-	mutation := `mutation($emoji: String!, $message: String!, $limited: Boolean) {
-		changeUserStatus(input: {emoji: $emoji, message: $message, limitedAvailability: $limited}) {
+	mutation := `mutation($emoji: String!, $message: String!, $limited: Boolean!, $expiry: DateTime) {
+		changeUserStatus(input: {emoji: $emoji, message: $message, limitedAvailability: $limited, expiresAt: $expiry}) {
 			status {
 				message
 				emoji
@@ -68,12 +67,18 @@ func runSet(opts setOptions) error {
 		limited = "true"
 	}
 
+	expiry := "null"
+	if opts.Expiry > time.Duration(0) {
+		expiry = time.Now().Add(opts.Expiry).Format("2006-01-02T15:04:05-0700")
+	}
+
 	cmdArgs := []string{
 		"api", "graphql",
 		"-f", fmt.Sprintf("query=%s", mutation),
 		"-f", fmt.Sprintf("message=%s", opts.Message),
 		"-f", fmt.Sprintf("emoji=%s", opts.Emoji),
 		"-F", fmt.Sprintf("limited=%s", limited),
+		"-F", fmt.Sprintf("expiry=%s", expiry),
 	}
 
 	var out bytes.Buffer
@@ -101,7 +106,7 @@ func runSet(opts setOptions) error {
 		return errors.New("failed to set status. Perhaps try another emoji")
 	}
 
-	// TODO print a nice confirm
+	fmt.Printf("✓ Status set to %s %s\n", opts.Emoji, opts.Message)
 
 	return nil
 }
