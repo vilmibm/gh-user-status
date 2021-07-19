@@ -12,4 +12,4 @@ cd "${extensionPath}" > /dev/null
 go build -o "${exe}"
 cd - > /dev/null
 
-exec "${extensionPath}/${exe}"
+exec "${extensionPath}/${exe}" "$@"
