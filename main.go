@@ -38,7 +38,7 @@ func setCmd() *cobra.Command {
 			return runSet(opts)
 		},
 	}
-	cmd.Flags().StringVarP(&opts.Emoji, "emoji", "e", ":thought_balloon:", "Emoji for status")
+	cmd.Flags().StringVarP(&opts.Emoji, "emoji", "e", "thought_balloon", "Emoji for status")
 	cmd.Flags().BoolVarP(&opts.Limited, "limited", "l", false, "Indicate limited availability")
 	cmd.Flags().DurationVarP(&opts.Expiry, "expiry", "E", time.Duration(0), "Expire status after this duration")
 	cmd.Flags().StringVarP(&opts.OrgName, "org", "o", "", "Limit status visibility to an organization")
@@ -67,11 +67,13 @@ func runSet(opts setOptions) error {
 		expiry = time.Now().Add(opts.Expiry).Format("2006-01-02T15:04:05-0700")
 	}
 
+	emoji := fmt.Sprintf(":%s:", opts.Emoji)
+
 	cmdArgs := []string{
 		"api", "graphql",
 		"-f", fmt.Sprintf("query=%s", mutation),
 		"-f", fmt.Sprintf("message=%s", opts.Message),
-		"-f", fmt.Sprintf("emoji=%s", opts.Emoji),
+		"-f", fmt.Sprintf("emoji=%s", emoji),
 		"-F", fmt.Sprintf("limited=%s", limited),
 		"-F", fmt.Sprintf("expiry=%s", expiry),
 	}
@@ -93,11 +95,11 @@ func runSet(opts setOptions) error {
 		return fmt.Errorf("failed to deserialize JSON: %w", err)
 	}
 
-	if resp.Data.ChangeUserStatus.Status.Emoji != opts.Emoji {
+	if resp.Data.ChangeUserStatus.Status.Emoji != emoji {
 		return errors.New("failed to set status. Perhaps try another emoji")
 	}
 
-	fmt.Printf("✓ Status set to %s %s\n", opts.Emoji, opts.Message)
+	fmt.Printf("✓ Status set to %s %s\n", emoji, opts.Message)
 
 	return nil
 }
