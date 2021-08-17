@@ -132,6 +132,8 @@ type status struct {
 }
 
 func runGet(opts getOptions) error {
+	em := newEmojiManager()
+
 	s, err := apiStatus(opts.Login)
 	if err != nil {
 		return err
@@ -141,10 +143,9 @@ func runGet(opts getOptions) error {
 	if s.IndicatesLimitedAvailability {
 		availability = "(availability is limited)"
 	}
-	fmt.Printf("%s %s %s\n",
-		s.Emoji, // TODO try and map to unicode
-		s.Message,
-		availability)
+	msg := fmt.Sprintf("%s %s %s", s.Emoji, s.Message, availability)
+
+	fmt.Println(em.ReplaceAll(msg))
 
 	return nil
 }
