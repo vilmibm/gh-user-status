@@ -8,6 +8,10 @@ type emojiManager struct {
 	emojis []emoji
 }
 
+func (em emojiManager) Emojis() []emoji {
+	return em.emojis
+}
+
 func (em emojiManager) ReplaceAll(s string) string {
 	out := []string{}
 	bySpace := strings.Split(s, " ")

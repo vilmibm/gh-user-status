@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/cli/safeexec"
 	"github.com/spf13/cobra"
 )
@@ -27,14 +28,59 @@ type setOptions struct {
 	OrgName string
 }
 
+func prompt(em emojiManager, opts *setOptions) error {
+	emojiChoices := []string{}
+	for _, e := range em.Emojis() {
+		emojiChoices = append(emojiChoices, fmt.Sprintf("%s %s %s", string(e.codepoint), e.names, e.desc))
+	}
+	qs := []*survey.Question{
+		{
+			Name:     "status",
+			Prompt:   &survey.Input{Message: "Status"},
+			Validate: survey.Required,
+		},
+		{
+			Name: "emoji",
+			Prompt: &survey.Select{
+				Message: "Emoji",
+				Options: emojiChoices,
+				Default: 147,
+			},
+		},
+		{
+			Name: "limited",
+			Prompt: &survey.Confirm{
+				Message: "Indicate limited availability?",
+			},
+		},
+	}
+	answers := struct {
+		Status  string
+		Emoji   int
+		Limited bool
+	}{}
+	err := survey.Ask(qs, &answers)
+	if err != nil {
+		return err
+	}
+
+	opts.Message = answers.Status
+	opts.Emoji = em.Emojis()[answers.Emoji].names[0]
+	opts.Limited = answers.Limited
+
+	return nil
+}
+
 func setCmd() *cobra.Command {
 	opts := setOptions{}
 	cmd := &cobra.Command{
 		Use:   "set <status>",
 		Short: "set your GitHub status",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts.Message = args[0]
+			if len(args) > 0 {
+				opts.Message = args[0]
+			}
 			return runSet(opts)
 		},
 	}
@@ -48,6 +94,12 @@ func setCmd() *cobra.Command {
 
 func runSet(opts setOptions) error {
 	em := newEmojiManager()
+	if opts.Message == "" {
+		err := prompt(em, &opts)
+		if err != nil {
+			return err
+		}
+	}
 	// TODO org flag -- punted on this bc i have to resolve an org ID and it didn't feel worth it.
 	mutation := `mutation($emoji: String!, $message: String!, $limited: Boolean!, $expiry: DateTime) {
 		changeUserStatus(input: {emoji: $emoji, message: $message, limitedAvailability: $limited, expiresAt: $expiry}) {
