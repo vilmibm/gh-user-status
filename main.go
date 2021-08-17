@@ -47,6 +47,7 @@ func setCmd() *cobra.Command {
 }
 
 func runSet(opts setOptions) error {
+	em := newEmojiManager()
 	// TODO org flag -- punted on this bc i have to resolve an org ID and it didn't feel worth it.
 	mutation := `mutation($emoji: String!, $message: String!, $limited: Boolean!, $expiry: DateTime) {
 		changeUserStatus(input: {emoji: $emoji, message: $message, limitedAvailability: $limited, expiresAt: $expiry}) {
@@ -99,7 +100,8 @@ func runSet(opts setOptions) error {
 		return errors.New("failed to set status. Perhaps try another emoji")
 	}
 
-	fmt.Printf("✓ Status set to %s %s\n", emoji, opts.Message)
+	msg := fmt.Sprintf("✓ Status set to %s %s", emoji, opts.Message)
+	fmt.Println(em.ReplaceAll(msg))
 
 	return nil
 }
