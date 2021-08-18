@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/AlecAivazis/survey/v2"
@@ -131,10 +132,34 @@ func runSet(opts setOptions) error {
 		"-F", fmt.Sprintf("expiry=%s", expiry),
 	}
 
-	out, _, err := gh(cmdArgs...)
+	out, stderr, err := gh(cmdArgs...)
 	if err != nil {
-		return err
+		if !strings.Contains(stderr.String(), "one of the following scopes: ['user']") {
+			return err
+		}
+
+		fmt.Println("! Sorry, this extension requires the 'user' scope.")
+		answer := false
+		err = survey.AskOne(
+			&survey.Confirm{
+				Message: "Would you like to add the user scope now?",
+				Default: true,
+			}, &answer)
+		if err != nil {
+			return fmt.Errorf("could not prompt: %w", err)
+		}
+		if !answer {
+			return nil
+		}
+		if err = ghWithInput("auth", "refresh", "-s", "user"); err != nil {
+			return err
+		}
+		out, _, err = gh(cmdArgs...)
+		if err != nil {
+			return err
+		}
 	}
+
 	type response struct {
 		Data struct {
 			ChangeUserStatus struct {
@@ -263,4 +288,24 @@ func gh(args ...string) (sout, eout bytes.Buffer, err error) {
 	}
 
 	return
+}
+
+// gh shells out to gh, connecting IO handles for user input
+func ghWithInput(args ...string) error {
+	ghBin, err := safeexec.LookPath("gh")
+	if err != nil {
+		return fmt.Errorf("could not find gh. Is it installed? error: %w", err)
+	}
+
+	cmd := exec.Command(ghBin, args...)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	cmd.Stdin = os.Stdin
+
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to run gh. error: %w", err)
+	}
+
+	return nil
 }
