@@ -184,7 +184,8 @@ func main() {
 	rc.AddCommand(getCmd())
 
 	if err := rc.Execute(); err != nil {
-		fmt.Println(err)
+		// TODO not bothering as long as cobra is also printing error
+		//fmt.Println(err)
 		os.Exit(1)
 	}
 }
