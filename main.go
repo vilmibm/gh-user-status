@@ -54,17 +54,41 @@ func prompt(em emojiManager, opts *setOptions) error {
 				Message: "Indicate limited availability?",
 			},
 		},
+		{
+			Name: "expiry",
+			Prompt: &survey.Select{
+				Message: "Clear status in",
+				Options: []string{
+					"Never",
+					"30m",
+					"1h",
+					"4h",
+					"24h",
+					"7d",
+				},
+			},
+		},
 	}
 	answers := struct {
 		Status  string
 		Emoji   int
 		Limited bool
+		Expiry  string
 	}{}
 	err := survey.Ask(qs, &answers)
 	if err != nil {
 		return err
 	}
 
+	if answers.Expiry == "Never" {
+		answers.Expiry = "0s"
+	}
+
+	if answers.Expiry == "7d" {
+		answers.Expiry = "168h"
+	}
+
+	opts.Expiry, _ = time.ParseDuration(answers.Expiry)
 	opts.Message = answers.Status
 	opts.Emoji = em.Emojis()[answers.Emoji].names[0]
 	opts.Limited = answers.Limited
