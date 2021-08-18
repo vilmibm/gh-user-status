@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/cli/safeexec"
 	"github.com/spf13/cobra"
 )
@@ -27,14 +29,83 @@ type setOptions struct {
 	OrgName string
 }
 
+func prompt(em emojiManager, opts *setOptions) error {
+	emojiChoices := []string{}
+	for _, e := range em.Emojis() {
+		emojiChoices = append(emojiChoices, fmt.Sprintf("%s %s %s", string(e.codepoint), e.names, e.desc))
+	}
+	qs := []*survey.Question{
+		{
+			Name:     "status",
+			Prompt:   &survey.Input{Message: "Status"},
+			Validate: survey.Required,
+		},
+		{
+			Name: "emoji",
+			Prompt: &survey.Select{
+				Message: "Emoji",
+				Options: emojiChoices,
+				Default: 147,
+			},
+		},
+		{
+			Name: "limited",
+			Prompt: &survey.Confirm{
+				Message: "Indicate limited availability?",
+			},
+		},
+		{
+			Name: "expiry",
+			Prompt: &survey.Select{
+				Message: "Clear status in",
+				Options: []string{
+					"Never",
+					"30m",
+					"1h",
+					"4h",
+					"24h",
+					"7d",
+				},
+			},
+		},
+	}
+	answers := struct {
+		Status  string
+		Emoji   int
+		Limited bool
+		Expiry  string
+	}{}
+	err := survey.Ask(qs, &answers)
+	if err != nil {
+		return err
+	}
+
+	if answers.Expiry == "Never" {
+		answers.Expiry = "0s"
+	}
+
+	if answers.Expiry == "7d" {
+		answers.Expiry = "168h"
+	}
+
+	opts.Expiry, _ = time.ParseDuration(answers.Expiry)
+	opts.Message = answers.Status
+	opts.Emoji = em.Emojis()[answers.Emoji].names[0]
+	opts.Limited = answers.Limited
+
+	return nil
+}
+
 func setCmd() *cobra.Command {
 	opts := setOptions{}
 	cmd := &cobra.Command{
 		Use:   "set <status>",
 		Short: "set your GitHub status",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts.Message = args[0]
+			if len(args) > 0 {
+				opts.Message = args[0]
+			}
 			return runSet(opts)
 		},
 	}
@@ -47,6 +118,13 @@ func setCmd() *cobra.Command {
 }
 
 func runSet(opts setOptions) error {
+	em := newEmojiManager()
+	if opts.Message == "" {
+		err := prompt(em, &opts)
+		if err != nil {
+			return err
+		}
+	}
 	// TODO org flag -- punted on this bc i have to resolve an org ID and it didn't feel worth it.
 	mutation := `mutation($emoji: String!, $message: String!, $limited: Boolean!, $expiry: DateTime) {
 		changeUserStatus(input: {emoji: $emoji, message: $message, limitedAvailability: $limited, expiresAt: $expiry}) {
@@ -78,10 +156,34 @@ func runSet(opts setOptions) error {
 		"-F", fmt.Sprintf("expiry=%s", expiry),
 	}
 
-	out, _, err := gh(cmdArgs...)
+	out, stderr, err := gh(cmdArgs...)
 	if err != nil {
-		return err
+		if !strings.Contains(stderr.String(), "one of the following scopes: ['user']") {
+			return err
+		}
+
+		fmt.Println("! Sorry, this extension requires the 'user' scope.")
+		answer := false
+		err = survey.AskOne(
+			&survey.Confirm{
+				Message: "Would you like to add the user scope now?",
+				Default: true,
+			}, &answer)
+		if err != nil {
+			return fmt.Errorf("could not prompt: %w", err)
+		}
+		if !answer {
+			return nil
+		}
+		if err = ghWithInput("auth", "refresh", "-s", "user"); err != nil {
+			return err
+		}
+		out, _, err = gh(cmdArgs...)
+		if err != nil {
+			return err
+		}
 	}
+
 	type response struct {
 		Data struct {
 			ChangeUserStatus struct {
@@ -99,7 +201,8 @@ func runSet(opts setOptions) error {
 		return errors.New("failed to set status. Perhaps try another emoji")
 	}
 
-	fmt.Printf("✓ Status set to %s %s\n", emoji, opts.Message)
+	msg := fmt.Sprintf("✓ Status set to %s %s", emoji, opts.Message)
+	fmt.Println(em.ReplaceAll(msg))
 
 	return nil
 }
@@ -130,6 +233,8 @@ type status struct {
 }
 
 func runGet(opts getOptions) error {
+	em := newEmojiManager()
+
 	s, err := apiStatus(opts.Login)
 	if err != nil {
 		return err
@@ -139,10 +244,9 @@ func runGet(opts getOptions) error {
 	if s.IndicatesLimitedAvailability {
 		availability = "(availability is limited)"
 	}
-	fmt.Printf("%s %s %s\n",
-		s.Emoji, // TODO try and map to unicode
-		s.Message,
-		availability)
+	msg := fmt.Sprintf("%s %s %s", s.Emoji, s.Message, availability)
+
+	fmt.Println(em.ReplaceAll(msg))
 
 	return nil
 }
@@ -209,4 +313,24 @@ func gh(args ...string) (sout, eout bytes.Buffer, err error) {
 	}
 
 	return
+}
+
+// gh shells out to gh, connecting IO handles for user input
+func ghWithInput(args ...string) error {
+	ghBin, err := safeexec.LookPath("gh")
+	if err != nil {
+		return fmt.Errorf("could not find gh. Is it installed? error: %w", err)
+	}
+
+	cmd := exec.Command(ghBin, args...)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	cmd.Stdin = os.Stdin
+
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to run gh. error: %w", err)
+	}
+
+	return nil
 }
