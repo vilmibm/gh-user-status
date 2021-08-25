@@ -1,41 +1,53 @@
 #!/bin/bash
 set -e
 
+repo="vilmibm/gh-user-status"
+tag="v1.0.0"
+
 extensionPath="$(dirname "$0")"
 arch="$(uname -m)"
 
+exe=""
 
 if uname -a | grep Msys > /dev/null; then
   if [ $arch = "x86_64" ]; then
-    exec "${extensionPath}/builds/windows-x86_64" "$@"
+    exe="windows-x86_64"
   elif [ $arch = "i686" ]; then
-    exec "${extensionPath}/builds/windows-i386" "$@"
+    exe="windows-i386"
   elif [ $arch = "i386" ]; then
-    exec "${extensionPath}/builds/windows-i386" "$@"
+    exe="windows-i386"
   fi
 elif uname -a | grep Darwin > /dev/null; then
   if [ $arch = "x86_64" ]; then
-    exec "${extensionPath}/builds/darwin-x86_64" "$@"
+    exe="darwin-x86_64"
   fi
 elif uname -a | grep Linux > /dev/null; then
   if [ $arch = "x86_64" ]; then
-    exec "${extensionPath}/builds/linux-x86_64" "$@"
+    exe="linux-x86_64"
   elif [ $arch = "i686" ]; then
-    exec "${extensionPath}/builds/linux-i386" "$@"
+    exe="linux-i386"
   elif [ $arch = "i386" ]; then
-    exec "${extensionPath}/builds/linux-i386" "$@"
+    exe="linux-i386"
   fi
 fi
 
-if [ "$(which go)" = "" ]; then 
-	echo "go must be installed to use this gh extension on this platform"
-	exit 1
+if [ "${exe}" == "" ]; then
+  if [ "$(which go)" = "" ]; then
+    echo "go must be installed to use this gh extension on this platform"
+    exit 1
+  fi
+
+  exe="cmd.out"
+
+  cd "${extensionPath}" > /dev/null
+  go build -o "${exe}"
+  cd - > /dev/null
+else
+  if [[ ! -x "${extensionPath}/${exe}" ]]; then
+    rm -f "${extensionPath}/${exe}"
+    gh release -R"${repo}" download "${tag}" -p "${exe}" --dir="${extensionPath}"
+    chmod +x "${extensionPath}/${exe}"
+  fi
 fi
-
-exe="cmd.out"
-
-cd "${extensionPath}" > /dev/null
-go build -o "${exe}"
-cd - > /dev/null
 
 exec "${extensionPath}/${exe}" "$@"
