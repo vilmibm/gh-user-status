@@ -2,6 +2,14 @@
 
 being an extension for interacting with the status on a GitHub profile.
 
+## installation
+
+```
+gh extension install vilmibm/gh-user-status
+```
+
+## usage
+
 - `gh user-status set`
 	- `gh user-status set` interactively set status
 	- `gh user-status set --limited "vacation"` set a status with limited availability
@@ -15,6 +23,6 @@ By default, the :thought_balloon: emoji is used.
 
 Limiting visibility of the status to an organization is not yet supported.
 
-# author
+## author
 
 vilmibm <vilmibm@github.com>
